@@ -155,7 +155,7 @@ function postTelegramWebhook(data) {
 
   try {
     UrlFetchApp.fetch('https://api.telegram.org/bot' + telegramBotToken + '/sendMessage', options);
-  } catch (error) {z`
+  } catch (error) {
     Logger.log(`Error posting webhook: ${error.message}`);
   }
   
