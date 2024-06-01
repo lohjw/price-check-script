@@ -7,6 +7,23 @@ const myTelegramID = "";
 const telegramBotToken = "";
 
 const game = {
+  title: "バディミッション BOND",
+  id: {
+    JP: "70010000012243",
+    US: "",
+  },
+  retailPrice: {
+    JP: 7128,
+    US: 0,
+  },
+  apiUrl: {
+    JP: "https://api.ec.nintendo.com/v1/price?country=JP&lang=ja&ids=70010000012243",
+    US: "",
+  },
+};
+
+/*
+const game = {
   title: "THEATRHYTHM FINAL BAR LINE",
   id: {
     JP: "",
@@ -21,17 +38,17 @@ const game = {
     US: "https://graph.nintendo.com/?operationName=ProductsBySku&variables=%7B%22locale%22%3A%22en_US%22%2C%22personalized%22%3Afalse%2C%22skus%22%3A%5B%227700015204%22%2C%227100056360%22%5D%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%2238a6ad9c4e61fc840abcaf65021262b6122c52040051acb97f07846d2cd7099c%22%7D%7D",
   },
 };
+*/
 
 const divider = `\n`;
 
 const forexUrl = {
-  JPY: "https://cdn.jsdelivr.net/gh/fawazahmed0/currency-api@1/latest/currencies/sgd/jpy.json",
-  USD: "https://cdn.jsdelivr.net/gh/fawazahmed0/currency-api@1/latest/currencies/sgd/usd.json",
+  SGD: "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/sgd.json",
 };
 
 async function main() {
-  var jpyExchangeRate = checkForexRates("JPY");
-  var usdExchangeRate = checkForexRates("USD");
+  var jpyExchangeRate = checkForexRates("jpy");
+  var usdExchangeRate = checkForexRates("usd");
 
   if (jpyExchangeRate !== null && usdExchangeRate !== null) {
     const eshopResponse = checkGamePrice(jpyExchangeRate, usdExchangeRate);
@@ -51,9 +68,9 @@ function checkForexRates(currency) {
   var exchangeRate = null;
 
   try {
-    var response = UrlFetchApp.fetch(forexUrl[currency]);
+    var response = UrlFetchApp.fetch(forexUrl["SGD"]);
     var responseData = JSON.parse(response.getContentText());
-    var currencyExchangeRate = responseData[currency.toLowerCase()];
+    var currencyExchangeRate = responseData.sgd[currency];
     exchangeRate = currencyExchangeRate;
   } catch (error) {
     Logger.log(error.message);
@@ -71,56 +88,63 @@ function checkGamePrice(jpyRate, usdRate) {
 
   result += divider;
 
-  // JP eShop price check
-  try {
-    var response1 = UrlFetchApp.fetch(game.apiUrl.JP);
-    var responseData1 = JSON.parse(response1.getContentText());
-
-    var priceJPY = parseInt(responseData1.prices[0].discount_price?.raw_value);
-    if (isNaN(priceJPY)) {
-      result += `\nJP Store No Discount: ${priceJPY} JPY`;
-      result += `\nSGD/JPY ${parseFloat(
-        jpyRate.toFixed(2)
-      )}: ${convertedJPYPrice} SGD`;
-    } else {
-      const convertedJPYPrice = convertPrice(priceJPY, jpyRate);
-      if (priceJPY < game.retailPrice.JP) {
-        result += `\nJP Store Sale! Current price: ${priceJPY} JPY`;
+  if (game.apiUrl.JP != "") {
+    // JP eShop price check
+    try {
+      var response1 = UrlFetchApp.fetch(game.apiUrl.JP);
+      var responseData1 = JSON.parse(response1.getContentText());
+      var priceDetails = responseData1.prices[0];
+      if ('discount_price' in priceDetails) {
+        var discountedPrice = parseInt(responseData1.prices[0].discount_price?.raw_value);
+        const convertedJPYPrice = convertPrice(discountedPrice, jpyRate);
+        if (discountedPrice < game.retailPrice.JP) {
+          result += `\nJP Store Sale! Current price: ${discountedPrice} JPY`;
+          result += `\nSGD/JPY ${parseFloat(
+            jpyRate.toFixed(2)
+          )}: ${convertedJPYPrice} SGD`;
+        }
+      } else {
+        var regularPrice = parseInt(responseData1.prices[0].regular_price?.raw_value);
+        const convertedJPYPrice = convertPrice(regularPrice, jpyRate);
+        result += `\nJP Store No Discount: ${regularPrice} JPY`;
         result += `\nSGD/JPY ${parseFloat(
           jpyRate.toFixed(2)
         )}: ${convertedJPYPrice} SGD`;
       }
+    } catch (error) {
+      result += `\nError fetching JP eShop data: ${error.message}`;
     }
-  } catch (error) {
-    result += `\nError fetching JP eShop data: ${error.message}`;
   }
 
   result += divider;
 
   // US eShop price check
-  try {
-    var response2 = UrlFetchApp.fetch(game.apiUrl.US);
-    var responseData2 = JSON.parse(response2.getContentText());
+  if (game.apiUrl.US != "") {
+    try {
+      var response2 = UrlFetchApp.fetch(game.apiUrl.US);
+      var responseData2 = JSON.parse(response2.getContentText());
 
-    var productUS = responseData2.data.products.find(
-      (product) => product.nsuid === game.id.US
-    );
-    var priceUSD = productUS.prices.minimum.finalPrice;
-    const convertedUSDPrice = convertPrice(priceUSD, usdRate);
-    if (priceUSD < game.retailPrice.US) {
-      result += `\nUS Store Sale! Current price: ${priceUSD} USD`;
-      result += `\nSGD/USD ${parseFloat(
-        usdRate.toFixed(2)
-      )}: ${convertedUSDPrice} SGD`;
-    } else {
-      result += `\nUS Store No Discount: ${priceUSD} USD`;
-      result += `\nSGD/USD ${parseFloat(
-        usdRate.toFixed(2)
-      )}: ${convertedUSDPrice} SGD`;
+      var productUS = responseData2.data.products.find(
+        (product) => product.nsuid === game.id.US
+      );
+      var priceUSD = productUS.prices.minimum.finalPrice;
+      const convertedUSDPrice = convertPrice(priceUSD, usdRate);
+      if (priceUSD < game.retailPrice.US) {
+        result += `\nUS Store Sale! Current price: ${priceUSD} USD`;
+        result += `\nSGD/USD ${parseFloat(
+          usdRate.toFixed(2)
+        )}: ${convertedUSDPrice} SGD`;
+      } else {
+        result += `\nUS Store No Discount: ${priceUSD} USD`;
+        result += `\nSGD/USD ${parseFloat(
+          usdRate.toFixed(2)
+        )}: ${convertedUSDPrice} SGD`;
+      }
+    } catch (error) {
+      result += `\nError fetching US eShop data: ${error.message}`;
     }
-  } catch (error) {
-    result += `\nError fetching US eShop data: ${error.message}`;
   }
+
 
   result += divider;
 
